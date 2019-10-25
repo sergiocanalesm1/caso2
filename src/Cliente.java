@@ -1,11 +1,13 @@
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.crypto.*;
+import javax.xml.bind.DatatypeConverter;
 import java.io.*;
 import java.net.Socket;
-import java.security.InvalidKeyException;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
+import java.security.*;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 
 public class Cliente{
 
@@ -76,6 +78,19 @@ public class Cliente{
         System.out.println(s);
     }
 
+    public static byte[] cifrarAsimetrico(Key pk, String algoritmo, String m){
+        try {
+            Cipher cifrador = Cipher.getInstance(algoritmo);
+            cifrador.init(Cipher.ENCRYPT_MODE, pk);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (NoSuchPaddingException e) {
+            e.printStackTrace();
+        } catch (InvalidKeyException e) {
+            e.printStackTrace();
+        }
+    }
+
     //genera llaves con algoritmo AES
     private static void generateSimetricKey(){
         try {
@@ -122,11 +137,37 @@ public class Cliente{
             String CD = bf.readLine();
             System.out.println(CD);
 
+
+
+
+            try {
+
+                //establecer estándar
+                CertificateFactory f = CertificateFactory.getInstance("X.509");
+
+                //extraer K+
+                byte[] bytesCD = DatatypeConverter.parseBase64Binary(CD);
+                InputStream input = new ByteArrayInputStream(bytesCD);
+                X509Certificate certificate = (X509Certificate)f.generateCertificate(input);
+                PublicKey pk = certificate.getPublicKey();
+
+
+            } catch (CertificateException e) {
+                e.printStackTrace();
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        //obtener llave de sesión a través del CD usando el estándar X509
+
+
+        //cifrar KS con la llave publica pk: cifrado asimétrico
+
+
+
+
+
 
 
 
