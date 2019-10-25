@@ -1,3 +1,4 @@
+import com.sun.xml.internal.messaging.saaj.util.ByteInputStream;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.crypto.*;
@@ -78,16 +79,24 @@ public class Cliente{
         System.out.println(s);
     }
 
+    //misma vaina que el simétrico pero mandando algoritmo al cifrador
     public static byte[] cifrarAsimetrico(Key pk, String algoritmo, String m){
         try {
             Cipher cifrador = Cipher.getInstance(algoritmo);
             cifrador.init(Cipher.ENCRYPT_MODE, pk);
+
+            return cifrador.doFinal(m.getBytes());
+
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
+            e.printStackTrace();return null;
         } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
+            e.printStackTrace();return null;
         } catch (InvalidKeyException e) {
-            e.printStackTrace();
+            e.printStackTrace();return null;
+        } catch (BadPaddingException e) {
+            e.printStackTrace();return null;
+        } catch (IllegalBlockSizeException e) {
+            e.printStackTrace();return null;
         }
     }
 
@@ -101,14 +110,11 @@ public class Cliente{
         }
     }
 
+
+
     public static void main(String args[]){
 
-        //String s = "esto lo quiero cifrar";
-        //byte[] mCifrado = cifrar(KS,s);
-        //imprimirBytes(mCifrado);
-        //byte[] mDescifrado = descifrar(mCifrado,KS);
-       // imprimirBytes(mDescifrado);
-        //System.out.println(new String(mDescifrado));
+
 
         //1: establecer conexión
         alistarConexion();
@@ -136,7 +142,7 @@ public class Cliente{
             //leer certificado digital
             String CD = bf.readLine();
             System.out.println(CD);
-
+            System.out.println(CD.length());
 
 
 
@@ -147,9 +153,40 @@ public class Cliente{
 
                 //extraer K+
                 byte[] bytesCD = DatatypeConverter.parseBase64Binary(CD);
+
                 InputStream input = new ByteArrayInputStream(bytesCD);
                 X509Certificate certificate = (X509Certificate)f.generateCertificate(input);
                 PublicKey pk = certificate.getPublicKey();
+                imprimirBytes(pk.getEncoded());
+
+                //generar llave de sesión
+                generateSimetricKey();
+
+                //cifrar KS con la llave publica pk: cifrado asimétrico
+
+
+
+                String algoritmoAsimetrico = "RSA";
+
+                String mensajeACifrar = DatatypeConverter.printBase64Binary(KS.getEncoded());
+                byte[] bytesMensajeCifrado = cifrarAsimetrico(pk,algoritmoAsimetrico,mensajeACifrar);
+
+                imprimirBytes(bytesMensajeCifrado);
+
+                //se envia la llave de sesión cifrada asimétricamente
+                pw.println(new String(bytesMensajeCifrado));
+                pw.flush();
+
+                //verificar que funciona el canal
+                pw.println("reto");
+                pw.flush();
+                String prueba = bf.readLine();
+
+                System.out.println("esto debería ser igual a prueba");
+                imprimirBytes(descifrarSimetrico(prueba.getBytes(),KS));
+
+
+
 
 
             } catch (CertificateException e) {
@@ -162,7 +199,6 @@ public class Cliente{
 
 
 
-        //cifrar KS con la llave publica pk: cifrado asimétrico
 
 
 
