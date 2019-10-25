@@ -31,11 +31,11 @@ public class Cliente{
     }
 
 
-    private static byte[] cifrarSimetrico(SecretKey KS, String m){
+    private static byte[] cifrarSimetrico(SecretKey ks, String m){
         try {
 
             Cipher cifrador = Cipher.getInstance(padding);
-            cifrador.init(Cipher.ENCRYPT_MODE,KS);
+            cifrador.init(Cipher.ENCRYPT_MODE,ks);
 
             return cifrador.doFinal(m.getBytes());
 
@@ -52,10 +52,10 @@ public class Cliente{
         }
     }
 
-    private static byte[] descifrarSimetrico(byte[] mCifrado, SecretKey KS){
+    private static byte[] descifrarSimetrico(byte[] mCifrado, Key ks){
         try {
             Cipher descifrador = Cipher.getInstance(padding);
-            descifrador.init(Cipher.DECRYPT_MODE,KS);
+            descifrador.init(Cipher.DECRYPT_MODE,ks);
             return descifrador.doFinal(mCifrado);
 
         } catch (NoSuchAlgorithmException e) {
@@ -141,8 +141,8 @@ public class Cliente{
 
             //leer certificado digital
             String CD = bf.readLine();
-            System.out.println(CD);
-            System.out.println(CD.length());
+
+
 
 
 
@@ -153,37 +153,33 @@ public class Cliente{
 
                 //extraer K+
                 byte[] bytesCD = DatatypeConverter.parseBase64Binary(CD);
-
                 InputStream input = new ByteArrayInputStream(bytesCD);
                 X509Certificate certificate = (X509Certificate)f.generateCertificate(input);
                 PublicKey pk = certificate.getPublicKey();
-                imprimirBytes(pk.getEncoded());
 
-                //generar llave de sesión
+
+
+
                 generateSimetricKey();
 
+
                 //cifrar KS con la llave publica pk: cifrado asimétrico
-
-
-
                 String algoritmoAsimetrico = "RSA";
+                String ksCifrada = new String(KS.getEncoded());
+                byte[] bytesksCifrada = cifrarAsimetrico(pk,algoritmoAsimetrico,ksCifrada);
 
-                String mensajeACifrar = DatatypeConverter.printBase64Binary(KS.getEncoded());
-                byte[] bytesMensajeCifrado = cifrarAsimetrico(pk,algoritmoAsimetrico,mensajeACifrar);
-
-                imprimirBytes(bytesMensajeCifrado);
 
                 //se envia la llave de sesión cifrada asimétricamente
-                pw.println(new String(bytesMensajeCifrado));
-                pw.flush();
+                pw.println(DatatypeConverter.printBase64Binary(bytesksCifrada));
 
                 //verificar que funciona el canal
                 pw.println("reto");
-                pw.flush();
                 String prueba = bf.readLine();
 
                 System.out.println("esto debería ser igual a prueba");
-                imprimirBytes(descifrarSimetrico(prueba.getBytes(),KS));
+                imprimirBytes(descifrarSimetrico(DatatypeConverter.parseBase64Binary(prueba),KS));
+
+
 
 
 
@@ -225,7 +221,7 @@ public class Cliente{
         try {
 
             connection = new Socket("localhost", 6789);
-            pw = new PrintWriter(connection.getOutputStream());
+            pw = new PrintWriter(connection.getOutputStream(), true);
             in = new InputStreamReader(connection.getInputStream());
             bf = new BufferedReader(in);
 
