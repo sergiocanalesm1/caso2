@@ -1,7 +1,12 @@
 import com.sun.xml.internal.messaging.saaj.util.ByteInputStream;
+
+import org.bouncycastle.crypto.digests.SHA256Digest;
+import org.bouncycastle.crypto.macs.HMac;
+import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.crypto.*;
+import javax.crypto.spec.SecretKeySpec;
 import javax.xml.bind.DatatypeConverter;
 import java.io.*;
 import java.net.Socket;
@@ -9,20 +14,22 @@ import java.security.*;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.*;
 
 public class Cliente{
 
+	//algoritmos y padding utilizados
+    private final static String padding = "AES/ECB/PKCS5Padding";
+    private final static String RSA = "RSA";
+    private final static String AES = "AES";    
+    private final static String HMAC = "HMACSHA256";
     private static Socket connection;
-    private final static String padding = "AES/ECB/PKCS5Padding";//algoritmos y formato
-    //private FileOutputStream archivoDeSalida;
-    //private ObjectOutputStream oos;
-    //private FileInputStream archivoDeEntrada;
-    //private ObjectInputStream ois;
     private static KeyGenerator keyGen;
     private static SecretKey KS;
     private static PrintWriter pw;
     private static BufferedReader bf;
     private static InputStreamReader in;
+    private static PublicKey PK;
 
 
 
@@ -52,12 +59,13 @@ public class Cliente{
         }
     }
 
-    private static byte[] descifrarSimetrico(byte[] mCifrado, Key ks){
+    private static byte[] descifrarSimetrico(byte[] texto, SecretKey ks){
+    	byte[] textoClaro;
         try {
             Cipher descifrador = Cipher.getInstance(padding);
             descifrador.init(Cipher.DECRYPT_MODE,ks);
-            return descifrador.doFinal(mCifrado);
-
+            textoClaro = descifrador.doFinal(texto);
+            
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();return null;
         } catch (NoSuchPaddingException e) {
@@ -65,10 +73,12 @@ public class Cliente{
         } catch (InvalidKeyException e) {
             e.printStackTrace();return null;
         } catch (BadPaddingException e) {
+        	System.out.println("por favor volver a correr el programa");
             e.printStackTrace();return null;
         } catch (IllegalBlockSizeException e) {
             e.printStackTrace();return null;
         }
+        return textoClaro;
     }
 
     private static void imprimirBytes(byte[] bytes){
@@ -79,7 +89,6 @@ public class Cliente{
         System.out.println(s);
     }
 
-    //misma vaina que el simÃ©trico pero mandando algoritmo al cifrador
     public static byte[] cifrarAsimetrico(Key pk, String algoritmo, String m){
         try {
             Cipher cifrador = Cipher.getInstance(algoritmo);
@@ -99,45 +108,85 @@ public class Cliente{
             e.printStackTrace();return null;
         }
     }
+    public static byte[] descifrarAsimetrico(Key pk, String algoritmo, byte[] texto){
+    	byte[] textoClaro;
+    	try {
+			Cipher descifrador = Cipher.getInstance(algoritmo);
+			descifrador.init(Cipher.DECRYPT_MODE, pk);
+			textoClaro = descifrador.doFinal(texto);
+			return textoClaro;
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();return null;
+		} catch (NoSuchPaddingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();return null;
+		} catch (InvalidKeyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();return null;
+		} catch (IllegalBlockSizeException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();return null;
+		} catch (BadPaddingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();return null;
+		}
+    }
 
     //genera llaves con algoritmo AES
     private static void generateSimetricKey(){
         try {
-            keyGen = KeyGenerator.getInstance("AES");
+            keyGen = KeyGenerator.getInstance(AES);
             KS = keyGen.generateKey();
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
     }
+    
+    
+	public static byte[] hash(byte[] valor)
+    {
+        HMac hmac = new HMac(new SHA256Digest());
+        hmac.init(new KeyParameter(KS.getEncoded()));
+        byte[] hbytes = new byte[hmac.getMacSize()];
+        hmac.update(valor,0,valor.length);
+        hmac.doFinal(hbytes, 0);
+        
+        return hbytes;
+    }
+
+    
 
 
 
     public static void main(String args[]){
+    	System.out.println(":)");
 
-
-
-        //1: establecer conexiÃ³n
+        /*
+         * ETAPA 1: 
+         */
+    	//establecer conexión
         alistarConexion();
         pw.println("HOLA");
-        pw.flush();
-
+        
         //leer OK
         try {
-            System.out.println(bf.readLine());
+            bf.readLine();
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        //2: mandar algoritmos en orden- simÃ©trico, asimÃ©trico y hmac
+        /*
+         * ETAPA 2
+         */
+        //mandar algoritmos en orden- simÃ©trico, asimÃ©trico y hmac
         String algoritmos = "ALGORITMOS:AES:RSA:HMACSHA256";
         pw.println(algoritmos);
-        pw.flush();
-
         try {
 
             //leer OK
-            System.out.println(bf.readLine());
+            bf.readLine();
 
             //leer certificado digital
             String CD = bf.readLine();
@@ -155,7 +204,7 @@ public class Cliente{
                 byte[] bytesCD = DatatypeConverter.parseBase64Binary(CD);
                 InputStream input = new ByteArrayInputStream(bytesCD);
                 X509Certificate certificate = (X509Certificate)f.generateCertificate(input);
-                PublicKey pk = certificate.getPublicKey();
+                PK = certificate.getPublicKey();
 
 
 
@@ -163,23 +212,68 @@ public class Cliente{
                 generateSimetricKey();
 
 
-                //cifrar KS con la llave publica pk: cifrado asimÃ©trico
-                String algoritmoAsimetrico = "RSA";
+                //cifrar KS con la llave publica pk: cifrado asimétrico
+                
                 String ksCifrada = new String(KS.getEncoded());
-                byte[] bytesksCifrada = cifrarAsimetrico(pk,algoritmoAsimetrico,ksCifrada);
+                byte[] bytesksCifrada = cifrarAsimetrico(PK,RSA,ksCifrada);
 
 
+                
+
+                //ETAPA 3
                 //se envia la llave de sesiÃ³n cifrada asimÃ©tricamente
                 pw.println(DatatypeConverter.printBase64Binary(bytesksCifrada));
 
                 //verificar que funciona el canal
                 pw.println("reto");
                 String prueba = bf.readLine();
-
-                System.out.println("esto deberÃ­a ser igual a prueba");
-                imprimirBytes(descifrarSimetrico(DatatypeConverter.parseBase64Binary(prueba),KS));
-
-
+                
+                String reto = DatatypeConverter.printBase64Binary(descifrarSimetrico(sumar4s(prueba),KS));
+                
+                
+                if(reto.equals("reto"))
+                	pw.println("OK");
+                else
+                	pw.println("ERROR");
+                	                	
+                
+                
+                //ingreso de datos
+                Scanner in = new Scanner(System.in);
+                System.out.println("Ingrese su cédula de ciudadanía: ");
+                String cc = in.nextLine();
+                System.out.println("Ingrese su contraseña: ");
+                String contraseña = in.nextLine();
+                
+                String CCcifrada = DatatypeConverter.printBase64Binary(cifrarSimetrico(KS, new String(sumar4s(cc))));
+                String contraseñaCifrada = DatatypeConverter.printBase64Binary(cifrarSimetrico(KS, new String(sumar4s(contraseña))));
+                
+                //envío de datos
+                pw.println(CCcifrada);
+                pw.println(contraseñaCifrada);
+                
+                
+                //ETAPA 4
+                //recibir valor y hmac para comparar 
+                String valorCifradoKS = bf.readLine();
+                String hmacCifradoPK = bf.readLine();
+                
+                
+                byte[] valor = descifrarSimetrico(sumar4s(valorCifradoKS),KS);
+                String hmac = DatatypeConverter.printBase64Binary(descifrarAsimetrico(PK, RSA, sumar4s(hmacCifradoPK)));
+                
+                
+                	
+				String hmacGeneradoPorValorRecibido =DatatypeConverter.printBase64Binary(hash(valor));
+                	 
+				if(hmacGeneradoPorValorRecibido.equals(hmac))pw.println("OK");
+				else pw.println("ERROR");
+					
+				
+                
+                
+                
+                
 
 
 
@@ -217,7 +311,22 @@ public class Cliente{
 
     }
 
-    private static void alistarConexion() {
+    
+
+    private static byte[] sumar4s(String rellenar) {
+    	String newString = rellenar;
+		while(newString.length() % 4 != 0){
+			newString = "0" + newString;
+		}
+    	
+		return DatatypeConverter.parseBase64Binary(newString);
+	}
+
+
+	
+
+
+	private static void alistarConexion() {
         try {
 
             connection = new Socket("localhost", 6789);
