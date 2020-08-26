@@ -1,2 +1,2 @@
-# caso2
-Computer Infraescture second practice project. Implementation of both Http Https protocols (java)
+# Htpps implementation
+Https server and client implementation using Java
